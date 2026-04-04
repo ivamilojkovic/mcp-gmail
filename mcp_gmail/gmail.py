@@ -15,8 +15,15 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import Resource, build
 
 # Default settings
-DEFAULT_CREDENTIALS_PATH = "/Users/ivamilojkovic/Projects/ai-personal-assistant/email-assistant/mcp-gmail/credentials.json"
-DEFAULT_TOKEN_PATH = "/Users/ivamilojkovic/Projects/ai-personal-assistant/email-assistant/mcp-gmail/token.json"
+_PKG_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_CREDENTIALS_PATH = os.getenv(
+    "MCP_GMAIL_CREDENTIALS_PATH",
+    os.path.join(_PKG_DIR, "..", "credentials.json"),
+)
+DEFAULT_TOKEN_PATH = os.getenv(
+    "MCP_GMAIL_TOKEN_PATH",
+    os.path.join(_PKG_DIR, "..", "token.json"),
+)
 DEFAULT_USER_ID = "me"
 
 # Gmail API scopes

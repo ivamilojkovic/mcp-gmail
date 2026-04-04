@@ -13,13 +13,13 @@ from mcp.server.fastmcp import FastMCP
 
 from mcp_gmail.config import settings
 from mcp_gmail.gmail import (
+    batch_modify_messages_labels,
     create_draft,
     get_gmail_service,
     get_headers_dict,
     get_labels,
     get_message,
     get_thread,
-    list_messages,
     modify_message_labels,
     parse_message_body,
     search_messages,
@@ -315,61 +315,6 @@ def search_unlabeled_emails(
 
 
 @mcp.tool()
-def query_emails(query: str, max_results: int = 10) -> str:
-    """
-    Search for emails using a raw Gmail query string.
-
-    Args:
-        query: Gmail search query (same syntax as Gmail search box)
-        max_results: Maximum number of results to return
-
-    Returns:
-        Formatted list of matching emails
-    """
-    messages = list_messages(service, user_id=settings.user_id, max_results=max_results, query=query)
-
-    result = f'Found {len(messages)} messages matching query: "{query}"\n'
-
-    for msg_info in messages:
-        msg_id = msg_info.get("id")
-        message = get_message(service, msg_id, user_id=settings.user_id)
-        headers = get_headers_dict(message)
-
-        from_header = headers.get("From", "Unknown")
-        subject = headers.get("Subject", "No Subject")
-        date = headers.get("Date", "Unknown Date")
-
-        result += f"\nMessage ID: {msg_id}\n"
-        result += f"From: {from_header}\n"
-        result += f"Subject: {subject}\n"
-        result += f"Date: {date}\n"
-
-    return result
-
-
-@mcp.tool()
-def list_available_labels() -> str:
-    """
-    Get all available Gmail labels for the user.
-
-    Returns:
-        Formatted list of labels with their IDs
-    """
-    labels = get_labels(service, user_id=settings.user_id)
-
-    result = "Available Gmail Labels:\n"
-    for label in labels:
-        label_id = label.get("id", "Unknown")
-        name = label.get("name", "Unknown")
-        type_info = label.get("type", "user")
-
-        result += f"\nLabel ID: {label_id}\n"
-        result += f"Name: {name}\n"
-        result += f"Type: {type_info}\n"
-
-    return result
-
-@mcp.tool()
 def get_available_labels() -> dict:
     """
     Get all available Gmail labels for the user.
@@ -400,33 +345,6 @@ def get_available_labels() -> dict:
         })
 
     return data
-
-
-@mcp.tool()
-def mark_message_read(message_id: str) -> str:
-    """
-    Mark a message as read by removing the UNREAD label.
-
-    Args:
-        message_id: The Gmail message ID to mark as read
-
-    Returns:
-        Confirmation message
-    """
-    # Remove the UNREAD label
-    result = modify_message_labels(
-        service, user_id=settings.user_id, message_id=message_id, remove_labels=["UNREAD"], add_labels=[]
-    )
-
-    # Get message details to show what was modified
-    headers = get_headers_dict(result)
-    subject = headers.get("Subject", "No Subject")
-
-    return f"""
-Message marked as read:
-ID: {message_id}
-Subject: {subject}
-"""
 
 
 @mcp.tool()
@@ -467,86 +385,6 @@ Added Label: {label_name} ({label_id})
 
 
 @mcp.tool()
-def remove_label_from_message(message_id: str, label_id: str) -> str:
-    """
-    Remove a label from a message.
-
-    Args:
-        message_id: The Gmail message ID
-        label_id: The Gmail label ID to remove (use list_available_labels to find label IDs)
-
-    Returns:
-        Confirmation message
-    """
-    # Get the label name before we remove it
-    label_name = label_id
-    labels = get_labels(service, user_id=settings.user_id)
-    for label in labels:
-        if label.get("id") == label_id:
-            label_name = label.get("name", label_id)
-            break
-
-    # Remove the specified label
-    result = modify_message_labels(
-        service, user_id=settings.user_id, message_id=message_id, remove_labels=[label_id], add_labels=[]
-    )
-
-    # Get message details to show what was modified
-    headers = get_headers_dict(result)
-    subject = headers.get("Subject", "No Subject")
-
-    return f"""
-Label removed from message:
-ID: {message_id}
-Subject: {subject}
-Removed Label: {label_name} ({label_id})
-"""
-
-
-@mcp.tool()
-def get_emails(message_ids: list[str]) -> str:
-    """
-    Get the content of multiple email messages by their IDs.
-
-    Args:
-        message_ids: A list of Gmail message IDs
-
-    Returns:
-        The formatted content of all requested emails
-    """
-    if not message_ids:
-        return "No message IDs provided."
-
-    # Fetch all emails first
-    retrieved_emails = []
-    error_emails = []
-
-    for msg_id in message_ids:
-        try:
-            message = get_message(service, msg_id, user_id=settings.user_id)
-            retrieved_emails.append((msg_id, message))
-        except Exception as e:
-            error_emails.append((msg_id, str(e)))
-
-    # Build result string after fetching all emails
-    result = f"Retrieved {len(retrieved_emails)} emails:\n"
-
-    # Format all successfully retrieved emails
-    for i, (msg_id, message) in enumerate(retrieved_emails, 1):
-        result += f"\n--- Email {i} (ID: {msg_id}) ---\n"
-        result += format_message(message)
-
-    # Report any errors
-    if error_emails:
-        result += f"\n\nFailed to retrieve {len(error_emails)} emails:\n"
-        for i, (msg_id, error) in enumerate(error_emails, 1):
-            result += f"\n--- Email {i} (ID: {msg_id}) ---\n"
-            result += f"Error: {error}\n"
-
-    return result
-
-
-@mcp.tool()
 def get_email_metadata(message_ids: list[str]) -> list[dict]:
     """
     Get structured header metadata for multiple emails.
@@ -576,6 +414,46 @@ def get_email_metadata(message_ids: list[str]) -> list[dict]:
         except Exception as e:
             results.append({"id": msg_id, "error": str(e)})
     return results
+
+
+@mcp.tool()
+def categorize_emails_from_sender(
+    sender_email: str,
+    category_label_id: str = "CATEGORY_PROMOTIONS",
+    max_results: int = 500,
+) -> dict:
+    """
+    Move all emails from a sender into a Gmail category tab.
+
+    Args:
+        sender_email: The sender's email address to filter by
+        category_label_id: Gmail system category label ID to apply.
+            Valid values: CATEGORY_PROMOTIONS, CATEGORY_SOCIAL,
+            CATEGORY_UPDATES, CATEGORY_FORUMS (default: CATEGORY_PROMOTIONS)
+        max_results: Maximum number of messages to categorize (default: 500)
+
+    Returns:
+        {"categorized_count": int, "category_label_id": str}
+    """
+    messages = search_messages(
+        service,
+        user_id=settings.user_id,
+        from_email=sender_email,
+        max_results=max_results,
+    )
+
+    if not messages:
+        return {"categorized_count": 0, "category_label_id": category_label_id}
+
+    message_ids = [m["id"] for m in messages]
+    batch_modify_messages_labels(
+        service,
+        user_id=settings.user_id,
+        message_ids=message_ids,
+        add_labels=[category_label_id],
+    )
+
+    return {"categorized_count": len(message_ids), "category_label_id": category_label_id}
 
 
 if __name__ == "__main__":
