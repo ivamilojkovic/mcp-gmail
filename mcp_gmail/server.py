@@ -546,5 +546,37 @@ def get_emails(message_ids: list[str]) -> str:
     return result
 
 
+@mcp.tool()
+def get_email_metadata(message_ids: list[str]) -> list[dict]:
+    """
+    Get structured header metadata for multiple emails.
+
+    Returns From, Subject, Date, and unsubscribe-relevant headers only.
+    Does NOT return email body or content.
+
+    Args:
+        message_ids: List of Gmail message IDs
+
+    Returns:
+        List of dicts with id, from, subject, date, list_unsubscribe, list_unsubscribe_post
+    """
+    results = []
+    for msg_id in message_ids:
+        try:
+            message = get_message(service, msg_id, user_id=settings.user_id)
+            headers = get_headers_dict(message)
+            results.append({
+                "id": msg_id,
+                "from": headers.get("From", ""),
+                "subject": headers.get("Subject", ""),
+                "date": headers.get("Date", ""),
+                "list_unsubscribe": headers.get("List-Unsubscribe", ""),
+                "list_unsubscribe_post": headers.get("List-Unsubscribe-Post", ""),
+            })
+        except Exception as e:
+            results.append({"id": msg_id, "error": str(e)})
+    return results
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
