@@ -261,6 +261,58 @@ def search_emails(
 
     return result
 
+@mcp.tool()
+def search_unlabeled_emails(
+    after_date: Optional[str] = None, 
+    before_date: Optional[str] = None,
+    max_results: int = 50
+    ) -> str:
+    """
+    Search for emails that have NO user-created labels.
+    System labels (INBOX, UNREAD, IMPORTANT etc.) are ignored.
+    """
+    # Validate dates
+    if after_date and not validate_date_format(after_date):
+        return f"Error: after_date '{after_date}' is not in YYYY/MM/DD format"
+    if before_date and not validate_date_format(before_date):
+        return f"Error: before_date '{before_date}' is not in YYYY/MM/DD format"
+
+    # Fetch ALL messages (with optional date filtering)
+    messages = search_messages(
+        service,
+        user_id=settings.user_id,
+        after=after_date,
+        before=before_date,
+        max_results=max_results,
+    )
+
+    # Get all user-defined labels
+    all_labels = get_labels(service, user_id=settings.user_id)
+    user_label_ids = {label["id"] for label in all_labels if label.get("type") == "user"}
+
+    result = "Messages without user labels:\n"
+    count = 0
+
+    for msg_info in messages:
+        msg_id = msg_info["id"]
+
+        # Fetch full message metadata
+        message = get_message(service, msg_id, user_id=settings.user_id)
+        labels = set(message.get("labelIds", []))
+
+        # Check if message has zero user labels
+        if labels.isdisjoint(user_label_ids):
+            count += 1
+            headers = get_headers_dict(message)
+            result += (
+                f"\nMessage ID: {msg_id}\n"
+                f"From: {headers.get('From', 'Unknown')}\n"
+                f"Subject: {headers.get('Subject', 'No Subject')}\n"
+                f"Date: {headers.get('Date', 'Unknown')}\n"
+            )
+
+    return f"Found {count} unlabeled messages:\n" + result
+
 
 @mcp.tool()
 def query_emails(query: str, max_results: int = 10) -> str:
@@ -316,6 +368,38 @@ def list_available_labels() -> str:
         result += f"Type: {type_info}\n"
 
     return result
+
+@mcp.tool()
+def get_available_labels() -> dict:
+    """
+    Get all available Gmail labels for the user.
+
+    Returns:
+        {
+            "labels": [
+                {
+                    "id": str,
+                    "name": str,
+                    "type": str
+                },
+                ...
+            ]
+        }
+    """
+    labels = get_labels(service, user_id=settings.user_id)
+
+    data = {
+        "labels": []
+    }
+
+    for label in labels:
+        data["labels"].append({
+            "id": label.get("id", "Unknown"),
+            "name": label.get("name", "Unknown"),
+            "type": label.get("type", "user")
+        })
+
+    return data
 
 
 @mcp.tool()
@@ -460,3 +544,7 @@ def get_emails(message_ids: list[str]) -> str:
             result += f"Error: {error}\n"
 
     return result
+
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")

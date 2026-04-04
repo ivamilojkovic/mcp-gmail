@@ -15,8 +15,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import Resource, build
 
 # Default settings
-DEFAULT_CREDENTIALS_PATH = "credentials.json"
-DEFAULT_TOKEN_PATH = "token.json"
+DEFAULT_CREDENTIALS_PATH = "/Users/ivamilojkovic/Projects/ai-personal-assistant/email-assistant/mcp-gmail/credentials.json"
+DEFAULT_TOKEN_PATH = "/Users/ivamilojkovic/Projects/ai-personal-assistant/email-assistant/mcp-gmail/token.json"
 DEFAULT_USER_ID = "me"
 
 # Gmail API scopes
@@ -25,6 +25,7 @@ GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/gmail.compose",
     "https://www.googleapis.com/auth/gmail.labels",
+    "https://www.googleapis.com/auth/gmail.modify"
 ]
 
 # For simpler testing
